@@ -1,72 +1,22 @@
 name: Build Android App
-
-on:
-  push:
-    branches: [ main, master ]
-  workflow_dispatch:
-
+on: [push, workflow_dispatch]
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
-
-      - name: Generate Valid AndroidManifest
-        run: |
-          python3 -c '
-          ns = "http" + "://://android.com"
-          xml = f"""<?xml version="1.0" encoding="utf-8"?>
-          <manifest xmlns:android="{ns}">
-              <uses-permission android:name="android.permission.INTERNET" />
-              <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-              <application
-                  android:allowBackup="true"
-                  android:label="Quick PDF Scanner"
-                  android:supportsRtl="true"
-                  android:theme="@style/Theme.MaterialComponents.DayNight.NoActionBar">
-                  <meta-data
-                      android:name="com.google.android.gms.ads.APPLICATION_ID"
-                      android:value="ca-app-pub-3940256099942544~3347511713" />
-                  <activity
-                      android:name=".MainActivity"
-                      android:exported="true">
-                      <intent-filter>
-                          <action android:name="android.intent.action.MAIN" />
-                          <category android:name="android.intent.category.LAUNCHER" />
-                      </intent-filter>
-                  </activity>
-                  <provider
-                      android:name="androidx.core.content.FileProvider"
-                      android:authorities="${{applicationId}}.fileprovider"
-                      android:exported="false"
-                      android:grantUriPermissions="true">
-                      <meta-data
-                          android:name="android.support.FILE_PROVIDER_PATHS"
-                          android:resource="@xml/file_paths" />
-                  </provider>
-              </application>
-          </manifest>"""
-          open("app/src/main/AndroidManifest.xml", "w").write(xml)
-          '
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+      - name: Generate Clean XML Files
+        run: python3 -c 'ns="http"+"://://android.com"; app="http"+"://://android.com"; open("app/src/main/AndroidManifest.xml","w").write(f"<manifest xmlns:android=\"{ns}\"><uses-permission android:name=\"android.permission.INTERNET\"/><uses-permission android:name=\"android.permission.ACCESS_NETWORK_STATE\"/><application android:allowBackup=\"true\" android:label=\"Quick PDF Scanner\" android:supportsRtl=\"true\" android:theme=\"@style/Theme.MaterialComponents.DayNight.NoActionBar\"><meta-data android:name=\"com.google.android.gms.ads.APPLICATION_ID\" android:value=\"ca-app-pub-3940256099942544~3347511713\"/><activity android:name=\".MainActivity\" android:exported=\"true\"><intent-filter><action android:name=\"android.intent.action.MAIN\"/><category android:name=\"android.intent.category.LAUNCHER\"/></intent-filter></activity><provider android:name=\"androidx.core.content.FileProvider\" android:authorities=\"${{applicationId}}.fileprovider\" android:exported=\"false\" android:grantUriPermissions=\"true\"><meta-data android:name=\"android.support.FILE_PROVIDER_PATHS\" android:resource=\"@xml/file_paths\"/></provider></application></manifest>"); open("app/src/main/res/layout/activity_main.xml","w").write(f"<LinearLayout xmlns:android=\"{ns}\" xmlns:app=\"{app}\" xmlns:ads=\"{app}\" android:layout_width=\"match_parent\" android:layout_height=\"match_parent\" android:orientation=\"vertical\" android:background=\"#F5F7FA\"><TextView android:layout_width=\"match_parent\" android:layout_height=\"wrap_content\" android:background=\"#1E3A8A\" android:padding=\"16dp\" android:text=\"PDF Scanner - No Watermark\" android:textColor=\"#FFFFFF\" android:textSize=\"20sp\" android:textStyle=\"bold\"/><com.google.android.material.tabs.TabLayout android:id=\"@+id/tabLayout\" android:layout_width=\"match_parent\" android:layout_height=\"wrap_content\" android:background=\"#FFFFFF\" app:tabIndicatorColor=\"#1E3A8A\" app:tabSelectedTextColor=\"#1E3A8A\" app:tabTextColor=\"#64748B\"><com.google.android.material.tabs.TabItem android:layout_width=\"wrap_content\" android:layout_height=\"wrap_content\" android:text=\"TAB 1: SCAN\"/><com.google.android.material.tabs.TabItem android:layout_width=\"wrap_content\" android:layout_height=\"wrap_content\" android:text=\"TAB 2: SAVED\"/></com.google.android.material.tabs.TabLayout><LinearLayout android:id=\"@+id/layoutTabScan\" android:layout_width=\"match_parent\" android:layout_height=\"0dp\" android:layout_weight=\"1\" android:gravity=\"center\" android:orientation=\"vertical\" android:padding=\"24dp\"><TextView android:layout_width=\"wrap_content\" android:layout_height=\"wrap_content\" android:gravity=\"center\" android:text=\"Scan Documents, CNIC &amp; Notes\" android:textColor=\"#1E293B\" android:textSize=\"22sp\" android:textStyle=\"bold\"/><TextView android:layout_width=\"wrap_content\" android:layout_height=\"wrap_content\" android:layout_marginTop=\"8dp\" android:layout_marginBottom=\"28dp\" android:gravity=\"center\" android:text=\"100% Free &amp; No Watermark • Offline &amp; Private\" android:textColor=\"#475569\" android:textSize=\"15sp\"/><Button android:id=\"@+id/btnStartScan\" android:layout_width=\"match_parent\" android:layout_height=\"64dp\" android:backgroundTint=\"#1E3A8A\" android:text=\"START SCANNING PDF\" android:textColor=\"#FFFFFF\" android:textSize=\"17sp\" android:textStyle=\"bold\"/></LinearLayout><LinearLayout android:id=\"@+id/layoutTabSaved\" android:layout_width=\"match_parent\" android:layout_height=\"0dp\" android:layout_weight=\"1\" android:orientation=\"vertical\" android:padding=\"16dp\" android:visibility=\"gone\"><TextView android:id=\"@+id/tvSavedHint\" android:layout_width=\"match_parent\" android:layout_height=\"wrap_content\" android:layout_marginBottom=\"8dp\" android:text=\"Tap any saved PDF below to Share or Open:\" android:textColor=\"#475569\" android:textSize=\"14sp\"/><ListView android:id=\"@+id/listSavedPdfs\" android:layout_width=\"match_parent\" android:layout_height=\"match_parent\" android:divider=\"#CBD5E1\" android:dividerHeight=\"1dp\"/></LinearLayout><com.google.android.gms.ads.AdView android:id=\"@+id/adView\" android:layout_width=\"match_parent\" android:layout_height=\"wrap_content\" ads:adSize=\"BANNER\" ads:adUnitId=\"ca-app-pub-3940256099942544/6300978111\"/></LinearLayout>")'
+      - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-
-      - name: Build Debug APK & Release AAB
-        run: |
-          echo "android.useAndroidX=true" >> gradle.properties
-          gradle assembleDebug bundleRelease
-
-      - name: Upload APK & Play Store AAB
-        uses: actions/upload-artifact@v4
+      - name: Build APK and AAB
+        run: echo "android.useAndroidX=true" >> gradle.properties && gradle assembleDebug bundleRelease
+      - uses: actions/upload-artifact@v4
         with:
           name: QuickPDFScanner-Files
           path: |
