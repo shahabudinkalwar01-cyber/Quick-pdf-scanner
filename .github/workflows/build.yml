@@ -17,11 +17,12 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Write Clean AndroidManifest
+      - name: Generate Valid AndroidManifest
         run: |
-          cat << 'EOF' > app/src/main/AndroidManifest.xml
-          <?xml version="1.0" encoding="utf-8"?>
-          <manifest xmlns:android="http://android.com">
+          python3 -c '
+          ns = "http" + "://://android.com"
+          xml = f"""<?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="{ns}">
               <uses-permission android:name="android.permission.INTERNET" />
               <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
               <application
@@ -42,7 +43,7 @@ jobs:
                   </activity>
                   <provider
                       android:name="androidx.core.content.FileProvider"
-                      android:authorities="${applicationId}.fileprovider"
+                      android:authorities="${{applicationId}}.fileprovider"
                       android:exported="false"
                       android:grantUriPermissions="true">
                       <meta-data
@@ -50,8 +51,9 @@ jobs:
                           android:resource="@xml/file_paths" />
                   </provider>
               </application>
-          </manifest>
-          EOF
+          </manifest>"""
+          open("app/src/main/AndroidManifest.xml", "w").write(xml)
+          '
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
