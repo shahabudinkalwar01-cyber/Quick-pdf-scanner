@@ -2,6 +2,7 @@ package com.quickpdf.scanner
 
 import android.app.Activity
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.widget.ArrayAdapter
@@ -18,7 +19,7 @@ import androidx.core.content.FileProvider
 import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.AdView
 import com.google.android.gms.ads.MobileAds
-import com.google.android.material.tabs.TabLayout
+import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions
 import com.google.mlkit.vision.documentscanner.GmsDocumentScanning
 import com.google.mlkit.vision.documentscanner.GmsDocumentScanningResult
@@ -30,20 +31,23 @@ import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var layoutTabScan: LinearLayout
-    private lateinit var layoutTabSaved: LinearLayout
-    private lateinit var listSavedPdfs: ListView
-    private lateinit var tvSavedHint: TextView
+    private lateinit var layoutHome: LinearLayout
+    private lateinit var layoutHistory: LinearLayout
+    private lateinit var listSavedDocs: ListView
+    private lateinit var tvHistoryHint: TextView
+    private lateinit var bottomNav: BottomNavigationView
     private var savedFilesList: List<File> = emptyList()
 
-    // Handles the finished PDF returned by Google's Document Scanner
     private val scannerLauncher = registerForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult()
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             val scanResult = GmsDocumentScanningResult.fromActivityResultIntent(result.data)
-            scanResult?.pdf?.let { pdf ->
-                savePdfToAppFolder(pdf.uri)
+            val pdfUri = scanResult?.pdf?.uri
+            val imageUris = scanResult?.pages?.map { it.imageUri } ?: emptyList()
+
+            if (pdfUri != null || imageUris.isNotEmpty()) {
+                askOutputFormatDialog(pdfUri, imageUris)
             }
         }
     }
@@ -52,44 +56,39 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        // Initialize Google AdMob Banner
         MobileAds.initialize(this) {}
-        val adView = findViewById<AdView>(R.id.adView)
-        adView.loadAd(AdRequest.Builder().build())
+        findViewById<AdView>(R.id.adView).loadAd(AdRequest.Builder().build())
 
-        layoutTabScan = findViewById(R.id.layoutTabScan)
-        layoutTabSaved = findViewById(R.id.layoutTabSaved)
-        listSavedPdfs = findViewById(R.id.listSavedPdfs)
-        tvSavedHint = findViewById(R.id.tvSavedHint)
+        layoutHome = findViewById(R.id.layoutHome)
+        layoutHistory = findViewById(R.id.layoutHistory)
+        listSavedDocs = findViewById(R.id.listSavedDocs)
+        tvHistoryHint = findViewById(R.id.tvHistoryHint)
+        bottomNav = findViewById(R.id.bottomNav)
 
-        val tabLayout = findViewById<TabLayout>(R.id.tabLayout)
-        val btnStartScan = findViewById<Button>(R.id.btnStartScan)
-
-        // Switch between Tab 1 (Scan) and Tab 2 (Saved Docs)
-        tabLayout.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
-            override fun onTabSelected(tab: TabLayout.Tab?) {
-                if (tab?.position == 0) {
-                    layoutTabScan.visibility = View.VISIBLE
-                    layoutTabSaved.visibility = View.GONE
-                } else {
-                    layoutTabScan.visibility = View.GONE
-                    layoutTabSaved.visibility = View.VISIBLE
-                    loadSavedPdfs()
-                }
-            }
-            override fun onTabUnselected(tab: TabLayout.Tab?) {}
-            override fun onTabReselected(tab: TabLayout.Tab?) {}
-        })
-
-        // Start Google ML Kit Document Scanner
-        btnStartScan.setOnClickListener {
+        findViewById<Button>(R.id.btnScanMain).setOnClickListener {
             startDocumentScan()
         }
 
-        // Handle tapping on a saved PDF in Tab 2
-        listSavedPdfs.setOnItemClickListener { _, _, position, _ ->
-            val selectedFile = savedFilesList[position]
-            showPdfOptionsDialog(selectedFile)
+        // Bottom Navigation: Home (1) and History (2)
+        bottomNav.setOnItemSelectedListener { item ->
+            when (item.itemId) {
+                R.id.nav_home -> {
+                    layoutHome.visibility = View.VISIBLE
+                    layoutHistory.visibility = View.GONE
+                    true
+                }
+                R.id.nav_history -> {
+                    layoutHome.visibility = View.GONE
+                    layoutHistory.visibility = View.VISIBLE
+                    loadHistoryFiles()
+                    true
+                }
+                else -> false
+            }
+        }
+
+        listSavedDocs.setOnItemClickListener { _, _, position, _ ->
+            showFileOptionsDialog(savedFilesList[position])
         }
     }
 
@@ -97,12 +96,14 @@ class MainActivity : AppCompatActivity() {
         val options = GmsDocumentScannerOptions.Builder()
             .setGalleryImportAllowed(true)
             .setPageLimit(30)
-            .setResultFormats(GmsDocumentScannerOptions.RESULT_FORMAT_PDF)
+            .setResultFormats(
+                GmsDocumentScannerOptions.RESULT_FORMAT_PDF,
+                GmsDocumentScannerOptions.RESULT_FORMAT_JPEG
+            )
             .setScannerMode(GmsDocumentScannerOptions.SCANNER_MODE_FULL)
             .build()
 
-        val scanner = GmsDocumentScanning.getClient(options)
-        scanner.getStartScanIntent(this)
+        GmsDocumentScanning.getClient(options).getStartScanIntent(this)
             .addOnSuccessListener { intentSender ->
                 scannerLauncher.launch(IntentSenderRequest.Builder(intentSender).build())
             }
@@ -111,57 +112,98 @@ class MainActivity : AppCompatActivity() {
             }
     }
 
-    private fun savePdfToAppFolder(pdfUri: android.net.Uri) {
-        try {
-            val pdfFolder = File(filesDir, "ScannedPDFs")
-            if (!pdfFolder.exists()) pdfFolder.mkdirs()
-
-            val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-            val destFile = File(pdfFolder, "Scan_$timeStamp.pdf")
-
-            contentResolver.openInputStream(pdfUri)?.use { input ->
-                FileOutputStream(destFile).use { output ->
-                    input.copyTo(output)
+    // Pop-up right after scanning to choose PDF, JPG, or PNG
+    private fun askOutputFormatDialog(pdfUri: Uri?, imageUris: List<Uri>) {
+        val formats = arrayOf(
+            "📄 Save as PDF (Document)",
+            "🖼️ Save as JPG (Photo Image)",
+            "🎨 Save as PNG (High Quality Image)"
+        )
+        AlertDialog.Builder(this)
+            .setTitle("Choose File Format")
+            .setCancelable(false)
+            .setItems(formats) { _, choice ->
+                when (choice) {
+                    0 -> if (pdfUri != null) saveStreamFile(pdfUri, "pdf")
+                    1 -> saveImages(imageUris, "jpg")
+                    2 -> saveImages(imageUris, "png")
                 }
             }
+            .show()
+    }
 
-            Toast.makeText(this, "Saved cleanly! Check Tab 2.", Toast.LENGTH_LONG).show()
-            findViewById<TabLayout>(R.id.tabLayout).getTabAt(1)?.select()
+    private fun saveStreamFile(uri: Uri, ext: String) {
+        try {
+            val folder = File(filesDir, "ScannedPDFs")
+            if (!folder.exists()) folder.mkdirs()
+            val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+            val dest = File(folder, "Scan_$stamp.$ext")
+
+            contentResolver.openInputStream(uri)?.use { input ->
+                FileOutputStream(dest).use { output -> input.copyTo(output) }
+            }
+            Toast.makeText(this, "Saved ${dest.name}!", Toast.LENGTH_SHORT).show()
+            bottomNav.selectedItemId = R.id.nav_history
         } catch (e: Exception) {
-            Toast.makeText(this, "Failed to save PDF", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Error saving file", Toast.LENGTH_SHORT).show()
         }
     }
 
-    private fun loadSavedPdfs() {
-        val pdfFolder = File(filesDir, "ScannedPDFs")
-        savedFilesList = pdfFolder.listFiles()?.sortedByDescending { it.lastModified() } ?: emptyList()
+    private fun saveImages(uris: List<Uri>, ext: String) {
+        try {
+            val folder = File(filesDir, "ScannedPDFs")
+            if (!folder.exists()) folder.mkdirs()
+            val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+
+            uris.forEachIndexed { index, uri ->
+                val suffix = if (uris.size > 1) "_${index + 1}" else ""
+                val dest = File(folder, "Scan_$stamp$suffix.$ext")
+                contentResolver.openInputStream(uri)?.use { input ->
+                    FileOutputStream(dest).use { output -> input.copyTo(output) }
+                }
+            }
+            Toast.makeText(this, "Saved ${uris.size} $ext file(s)!", Toast.LENGTH_SHORT).show()
+            bottomNav.selectedItemId = R.id.nav_history
+        } catch (e: Exception) {
+            Toast.makeText(this, "Error saving image", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun loadHistoryFiles() {
+        val folder = File(filesDir, "ScannedPDFs")
+        savedFilesList = folder.listFiles()?.sortedByDescending { it.lastModified() } ?: emptyList()
 
         if (savedFilesList.isEmpty()) {
-            tvSavedHint.text = "No saved PDFs yet. Go to Tab 1 and scan your first page!"
-            listSavedPdfs.adapter = null
+            tvHistoryHint.text = "No files yet. Tap Home and press SCAN!"
+            listSavedDocs.adapter = null
             return
         }
 
-        tvSavedHint.text = "Tap any PDF below to Share on WhatsApp, Open, or Delete:"
-        val displayNames = savedFilesList.map { file ->
-            val sizeKb = file.length() / 1024
-            "📄 ${file.name}  (${sizeKb} KB)"
+        tvHistoryHint.text = "Tap any PDF, JPG, or PNG below to Share or Open:"
+        val labels = savedFilesList.map { file ->
+            val kb = (file.length() / 1024).coerceAtLeast(1)
+            val icon = when (file.extension.lowercase()) {
+                "pdf" -> "📄"
+                "jpg", "jpeg" -> "🖼️"
+                "png" -> "🎨"
+                else -> "📁"
+            }
+            "$icon ${file.name}  (${kb} KB)"
         }
-
-        listSavedPdfs.adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, displayNames)
+        listSavedDocs.adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, labels)
     }
 
-    private fun showPdfOptionsDialog(file: File) {
-        val options = arrayOf("📤 Share (WhatsApp / Email)", "👁️ Open PDF", "🗑️ Delete")
+    private fun showFileOptionsDialog(file: File) {
+        val options = arrayOf("📤 Share (WhatsApp / Email)", "👁️ Open File", "🗑️ Delete")
         AlertDialog.Builder(this)
             .setTitle(file.name)
             .setItems(options) { _, which ->
                 when (which) {
-                    0 -> sharePdf(file)
-                    1 -> openPdf(file)
+                    0 -> shareFile(file)
+                    1 -> openFile(file)
                     2 -> {
                         file.delete()
-                        loadSavedPdfs()
+                        loadHistoryFiles()
                         Toast.makeText(this, "Deleted", Toast.LENGTH_SHORT).show()
                     }
                 }
@@ -169,26 +211,33 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun sharePdf(file: File) {
+    private fun getMimeType(file: File): String = when (file.extension.lowercase()) {
+        "pdf" -> "application/pdf"
+        "jpg", "jpeg" -> "image/jpeg"
+        "png" -> "image/png"
+        else -> "*/*"
+    }
+
+    private fun shareFile(file: File) {
         val uri = FileProvider.getUriForFile(this, "${packageName}.fileprovider", file)
-        val shareIntent = Intent(Intent.ACTION_SEND).apply {
-            type = "application/pdf"
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = getMimeType(file)
             putExtra(Intent.EXTRA_STREAM, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        startActivity(Intent.createChooser(shareIntent, "Share PDF via"))
+        startActivity(Intent.createChooser(intent, "Share File via"))
     }
 
-    private fun openPdf(file: File) {
+    private fun openFile(file: File) {
         val uri = FileProvider.getUriForFile(this, "${packageName}.fileprovider", file)
-        val viewIntent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, "application/pdf")
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, getMimeType(file))
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         try {
-            startActivity(viewIntent)
+            startActivity(intent)
         } catch (e: Exception) {
-            Toast.makeText(this, "No PDF viewer installed", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "No viewer app found", Toast.LENGTH_SHORT).show()
         }
     }
 }
