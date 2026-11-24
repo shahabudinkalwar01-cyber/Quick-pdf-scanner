@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://android.com"
+    xmlns:app="http://android.com"
+    xmlns:ads="http://android.com"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#F5F7FA">
+
+    <!-- Top App Title Bar -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#1E3A8A"
+        android:padding="16dp"
+        android:text="PDF Scanner - No Watermark"
+        android:textColor="#FFFFFF"
+        android:textSize="20sp"
+        android:textStyle="bold" />
+
+    <!-- 2 Tabs: Tab 1 (Scan) & Tab 2 (Saved) -->
+    <com.google.android.material.tabs.TabLayout
+        android:id="@+id/tabLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#FFFFFF"
+        app:tabIndicatorColor="#1E3A8A"
+        app:tabSelectedTextColor="#1E3A8A"
+        app:tabTextColor="#64748B">
+
+        <com.google.android.material.tabs.TabItem
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="📷 TAB 1: SCAN" />
+
+        <com.google.android.material.tabs.TabItem
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="📄 TAB 2: SAVED" />
+    </com.google.android.material.tabs.TabLayout>
+
+    <!-- TAB 1 CONTENT: Scanner Screen -->
+    <LinearLayout
+        android:id="@+id/layoutTabScan"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:text="Scan Documents, CNIC &amp; Notes"
+            android:textColor="#1E293B"
+            android:textSize="22sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="28dp"
+            android:gravity="center"
+            android:text="• 100% Free &amp; No Watermark\n• Offline &amp; Private\n• Auto-Crop &amp; Clean Filters"
+            android:textColor="#475569"
+            android:textSize="15sp" />
+
+        <Button
+            android:id="@+id/btnStartScan"
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:backgroundTint="#1E3A8A"
+            android:text="📷 START SCANNING PDF"
+            android:textColor="#FFFFFF"
+            android:textSize="17sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- TAB 2 CONTENT: Saved PDFs History Screen -->
+    <LinearLayout
+        android:id="@+id/layoutTabSaved"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:padding="16dp"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/tvSavedHint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:text="Tap any saved PDF below to Share on WhatsApp or Open:"
+            android:textColor="#475569"
+            android:textSize="14sp" />
+
+        <ListView
+            android:id="@+id/listSavedPdfs"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:divider="#CBD5E1"
+            android:dividerHeight="1dp" />
+    </LinearLayout>
+
+    <!-- Bottom Google AdMob Banner (Test Ad Unit ID) -->
+    <com.google.android.gms.ads.AdView
+        android:id="@+id/adView"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        ads:adSize="BANNER"
+        ads:adUnitId="ca-app-pub-3940256099942544/6300978111" />
+
+</LinearLayout>
