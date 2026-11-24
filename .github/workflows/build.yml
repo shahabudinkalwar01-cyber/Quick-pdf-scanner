@@ -9,14 +9,38 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
-      - name: Fix XML Headers
+      - name: Write Clean XML Files
         run: |
-          python3 -c 'import glob; u="http"+"://"+"schemas."+"android."+"com/apk/res/"; [open(f,"w").write(open(f).read().replace("xmlns:android=\"\"","xmlns:android=\""+u+"android\"").replace("xmlns:app=\"\"","xmlns:app=\""+u+"auto\"").replace("xmlns:ads=\"\"","xmlns:ads=\""+u+"auto\"")) for f in glob.glob("app/src/main/**/*.xml",recursive=True)]'
+          python3 -c '
+          b = "http" + "://" + "schemas." + "android." + "com/apk/res/"
+          ns = b + "android"
+          ap = b + "auto"
+          m = f"""<?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="{ns}">
+              <uses-permission android:name="android.permission.INTERNET" />
+              <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+              <application android:allowBackup="true" android:label="Quick PDF Scanner" android:supportsRtl="true" android:theme="@style/Theme.MaterialComponents.DayNight.NoActionBar">
+                  <meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="ca-app-pub-3940256099942544~3347511713" />
+                  <activity android:name=".MainActivity" android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+                  <provider android:name="androidx.core.content.FileProvider" android:authorities="${{applicationId}}.fileprovider" android:exported="false" android:grantUriPermissions="true">
+                      <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
+                  </provider>
+              </application>
+          </manifest>"""
+          open("app/src/main/AndroidManifest.xml", "w").write(m)
+          '
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
       - name: Build APK and AAB
-        run: echo "android.useAndroidX=true" >> gradle.properties && gradle assembleDebug bundleRelease
+        run: |
+          echo "android.useAndroidX=true" >> gradle.properties
+          gradle assembleDebug bundleRelease
       - uses: actions/upload-artifact@v4
         with:
           name: QuickPDFScanner-Files
